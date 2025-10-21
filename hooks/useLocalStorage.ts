@@ -1,22 +1,41 @@
-
 import { useState, useEffect } from 'react';
 
-function getStorageValue<T,>(key: string, defaultValue: T): T {
-  const saved = localStorage.getItem(key);
-  if (saved) {
-    return JSON.parse(saved) as T;
-  }
-  return defaultValue;
-}
-
-export function useLocalStorage<T,>(key: string, defaultValue: T): [T, React.Dispatch<React.SetStateAction<T>>] {
-  const [value, setValue] = useState(() => {
-    return getStorageValue(key, defaultValue);
+function useLocalStorage<T>(key: string, initialValue: T): [T, React.Dispatch<React.SetStateAction<T>>] {
+  const [storedValue, setStoredValue] = useState<T>(() => {
+    try {
+      const item = window.localStorage.getItem(key);
+      return item ? JSON.parse(item) : initialValue;
+    } catch (error) {
+      console.error(error);
+      return initialValue;
+    }
   });
 
-  useEffect(() => {
-    localStorage.setItem(key, JSON.stringify(value));
-  }, [key, value]);
+  const setValue: React.Dispatch<React.SetStateAction<T>> = (value) => {
+    try {
+      const valueToStore = value instanceof Function ? value(storedValue) : value;
+      setStoredValue(valueToStore);
+      window.localStorage.setItem(key, JSON.stringify(valueToStore));
+    } catch (error) {
+      console.error(error);
+    }
+  };
 
-  return [value, setValue];
+  useEffect(() => {
+     try {
+        const item = window.localStorage.getItem(key);
+        if (item) {
+            setStoredValue(JSON.parse(item));
+        } else {
+             window.localStorage.setItem(key, JSON.stringify(initialValue));
+        }
+     } catch(e) {
+         console.error(e)
+     }
+  }, [key, initialValue]);
+
+
+  return [storedValue, setValue];
 }
+
+export default useLocalStorage;

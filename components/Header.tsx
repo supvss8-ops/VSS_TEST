@@ -3,31 +3,32 @@ import { User } from '../types';
 import { Button } from './common/Button';
 
 interface HeaderProps {
-  user: User;
+  currentUser: User | null;
+  onNavigate: (path: 'dashboard' | 'admin') => void;
   onLogout: () => void;
-  onSwitchToAdmin?: () => void;
-  isAdminView?: boolean;
 }
 
-export const Header: React.FC<HeaderProps> = ({ user, onLogout, onSwitchToAdmin, isAdminView }) => {
+const Header: React.FC<HeaderProps> = ({ currentUser, onNavigate, onLogout }) => {
+
   return (
-    <header className="bg-white shadow-md sticky top-0 z-40">
+    <header className="bg-white shadow-sm" dir="rtl">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           <div className="flex-shrink-0">
             <h1 className="text-xl font-bold text-indigo-600">نظام إدارة الطلبات</h1>
           </div>
-          <div className="flex items-center space-x-2 space-x-reverse">
-            <span className="text-gray-700 ml-4 hidden sm:block">مرحباً, {user.name}</span>
-            {user.role === 'Admin' && onSwitchToAdmin && (
-               <Button onClick={onSwitchToAdmin} variant="secondary">
-                {isAdminView ? 'عرض الفواتير' : 'لوحة تحكم المدير'}
+          {currentUser && (
+            <div className="flex items-center space-x-4 space-x-reverse">
+                <span className="text-sm font-medium text-gray-700">مرحباً, {currentUser.name}</span>
+                 <Button variant="secondary" onClick={() => onNavigate('dashboard')}>الفواتير</Button>
+                {currentUser.role === 'Admin' && (
+                    <Button variant="secondary" onClick={() => onNavigate('admin')}>لوحة الأدمن</Button>
+                )}
+              <Button onClick={onLogout} variant="danger">
+                تسجيل الخروج
               </Button>
-            )}
-            <Button onClick={onLogout} variant="secondary">
-              تسجيل الخروج
-            </Button>
-          </div>
+            </div>
+          )}
         </div>
       </div>
     </header>

@@ -1,50 +1,55 @@
-import { Order, Product, User } from '../types';
+import { Order, Product } from '../types';
+import * as XLSX from 'xlsx';
 
-declare const XLSX: any;
+export const exportToExcel = (orders: Order[], products: Product[]) => {
+  // Create a mapping from productId to productName for easy lookup
+  const productMap = new Map<string, string>();
+  products.forEach(p => productMap.set(p.id, p.name));
 
-export const exportToExcel = (orders: Order[], products: Product[], users: User[]) => {
-  const productMap = new Map(products.map(p => [p.sku, p.name]));
-  const userMap = new Map(users.map(u => [u.id, u.name]));
-
-  // Sheet 1: Invoices Data
-  const invoicesData = orders.map(order => {
-    const totalSelling = order.items.reduce((sum, item) => sum + item.quantity * item.sellingPrice, 0);
-    const totalPurchase = order.items.reduce((sum, item) => sum + item.quantity * item.purchasePrice, 0);
-    return {
+  const dataToExport = orders.flatMap(order => 
+    order.items.map(item => ({
       'رقم الفاتورة': order.invoiceNumber,
       'تاريخ الفاتورة': order.invoiceDate,
       'اسم العميل': order.customerName,
       'هاتف العميل': order.customerPhone,
       'عنوان العميل': order.customerAddress,
-      'إجمالي البيع': totalSelling,
-      'إجمالي الشراء': totalPurchase,
-      'الربح': totalSelling - totalPurchase,
-      'حالة الطلب': order.status,
-      'تم الإنشاء بواسطة': userMap.get(order.createdBy) || order.createdBy,
-    };
-  });
-
-  // Sheet 2: Invoice Items Data
-  const itemsData = orders.flatMap(order => 
-    order.items.map(item => ({
-      'رقم الفاتورة': order.invoiceNumber, // Key for linking
-      'تاريخ الفاتورة': order.invoiceDate,
-      'كود المنتج (SKU)': item.sku,
-      'اسم المنتج': productMap.get(item.sku) || 'غير معروف',
+      'كود المنتج': item.productId,
+      'اسم المنتج': item.productName || productMap.get(item.productId) || 'غير متوفر', // Fallback
       'الكمية': item.quantity,
-      'سعر الشراء للقطعة': item.purchasePrice,
-      'سعر البيع للقطعة': item.sellingPrice,
-      'إجمالي سعر الشراء للمنتج': item.quantity * item.purchasePrice,
-      'إجمالي سعر البيع للمنتج': item.quantity * item.sellingPrice,
+      'سعر التكلفة': item.costPrice,
+      'سعر البيع': item.sellingPrice,
+      'إجمالي الصنف': item.quantity * item.sellingPrice,
+      'حالة الفاتورة': order.status,
+      'اسم المندوب': order.createdByName,
     }))
   );
 
-  const wb = XLSX.utils.book_new();
-  const wsInvoices = XLSX.utils.json_to_sheet(invoicesData);
-  const wsItems = XLSX.utils.json_to_sheet(itemsData);
+  if (dataToExport.length === 0) {
+    alert('لا توجد بيانات لتصديرها.');
+    return;
+  }
 
-  XLSX.utils.book_append_sheet(wb, wsInvoices, 'الفواتير');
-  XLSX.utils.book_append_sheet(wb, wsItems, 'تفاصيل الفواتير');
-  
-  XLSX.writeFile(wb, 'Orders_Report.xlsx');
+  const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'الفواتير');
+
+  // Set column widths for better readability (optional)
+  const colWidths = [
+    { wch: 15 }, // رقم الفاتورة
+    { wch: 15 }, // تاريخ الفاتورة
+    { wch: 25 }, // اسم العميل
+    { wch: 15 }, // هاتف العميل
+    { wch: 30 }, // عنوان العميل
+    { wch: 15 }, // كود المنتج
+    { wch: 30 }, // اسم المنتج
+    { wch: 10 }, // الكمية
+    { wch: 15 }, // سعر التكلفة
+    { wch: 15 }, // سعر البيع
+    { wch: 20 }, // إجمالي الصنف
+    { wch: 15 }, // حالة الفاتورة
+    { wch: 20 }, // اسم المندوب
+  ];
+  worksheet['!cols'] = colWidths;
+
+  XLSX.writeFile(workbook, 'Orders_Export.xlsx');
 };

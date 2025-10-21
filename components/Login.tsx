@@ -1,56 +1,83 @@
 import React, { useState } from 'react';
-import { User } from '../types';
-import { Input } from './common/Input';
+import { loginWithUsernameAndPassword } from '../firebaseService';
 import { Button } from './common/Button';
-import { Select } from './common/Select';
+import { Input } from './common/Input';
+import { User } from '../types';
 
 interface LoginProps {
-  users: User[];
-  onLogin: (user: User) => void;
+    onLoginSuccess: (user: User) => void;
 }
 
-const Login: React.FC<LoginProps> = ({ users, onLogin }) => {
-  const [selectedUserId, setSelectedUserId] = useState<string>(users[0]?.id || '');
+const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    const user = users.find(u => u.id === selectedUserId);
-    if (user && user.password === password) {
-      onLogin(user);
-    } else {
-      setError('كلمة المرور غير صحيحة.');
+    setError(null);
+    setLoading(true);
+    try {
+      const user = await loginWithUsernameAndPassword(username, password);
+      if (user) {
+        onLoginSuccess(user);
+      } else {
+        setError('اسم المستخدم أو كلمة المرور غير صحيحة.');
+      }
+    } catch (err: any) {
+      setError(err.message || 'فشل في تسجيل الدخول.');
+      console.error(err);
+    } finally {
+        setLoading(false);
     }
   };
 
-  const userOptions = users.map(u => ({ value: u.id, label: u.name }));
-
   return (
-    <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-      <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
-        <h2 className="text-2xl font-bold text-center text-gray-800 mb-6">تسجيل الدخول</h2>
-        {error && <p className="bg-red-100 text-red-700 p-3 rounded-md mb-4 text-center">{error}</p>}
-        <form onSubmit={handleLogin} className="space-y-6" dir="rtl">
-           <Select
-              label="اختر المستخدم"
-              id="user-select"
-              options={userOptions}
-              value={selectedUserId}
-              onChange={(e) => setSelectedUserId(e.target.value)}
-              required
-            />
-          <Input
-            label="كلمة المرور"
-            id="password"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-          />
-          <Button type="submit" className="w-full">
-            دخول
-          </Button>
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-md w-full space-y-8">
+        <div>
+          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
+            تسجيل الدخول
+          </h2>
+        </div>
+        <form className="mt-8 space-y-6" onSubmit={handleLogin}>
+          <div className="rounded-md shadow-sm -space-y-px">
+            <div>
+              <Input
+                label="اسم المستخدم"
+                id="username"
+                name="username"
+                type="text"
+                autoComplete="username"
+                required
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                className="rounded-t-md"
+              />
+            </div>
+            <div>
+              <Input
+                label="كلمة المرور"
+                id="password"
+                name="password"
+                type="password"
+                autoComplete="current-password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="rounded-b-md"
+              />
+            </div>
+          </div>
+
+          {error && <p className="text-red-500 text-sm text-center">{error}</p>}
+
+          <div>
+            <Button type="submit" className="w-full" disabled={loading}>
+              {loading ? 'جاري الدخول...' : 'تسجيل الدخول'}
+            </Button>
+          </div>
         </form>
       </div>
     </div>

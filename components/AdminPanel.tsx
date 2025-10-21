@@ -1,335 +1,303 @@
-import React, { useState, useCallback } from 'react';
-import { User, Product, Customer, UserRole } from '../types';
+import React, { useState } from 'react';
+import { User, Product, Customer, Order, UserRole } from '../types';
 import { Button } from './common/Button';
-import { Modal } from './common/Modal';
 import { Input } from './common/Input';
+import { Modal } from './common/Modal';
 import { Select } from './common/Select';
-import { ROLES } from '../constants';
+import { addDocument, updateDocument, deleteDocument } from '../firebaseService';
 
-// --- Form Components for CRUD ---
+interface AdminPanelProps {
+  users: User[];
+  products: Product[];
+  customers: Customer[];
+  orders: Order[];
+}
 
-const UserForm: React.FC<{ user: Partial<User> | null; onSave: (user: User) => void; onCancel: () => void }> = ({ user, onSave, onCancel }) => {
-  const [formData, setFormData] = useState({
-    id: user?.id || `user-${Date.now()}`,
-    name: user?.name || '',
-    role: user?.role || 'Representative',
-    password: user?.password || ''
-  });
+type AdminTab = 'users' | 'products' | 'customers';
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!formData.name || !formData.password) {
-      alert("الاسم وكلمة المرور مطلوبان.");
-      return;
-    }
-    onSave(formData as User);
+const AdminPanel: React.FC<AdminPanelProps> = ({ users, products, customers }) => {
+  const [activeTab, setActiveTab] = useState<AdminTab>('users');
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<any>(null);
+
+  const handleOpenModal = (item?: any) => {
+    setEditingItem(item || null);
+    setIsModalOpen(true);
   };
 
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setEditingItem(null);
+  };
+
+  const renderContent = () => {
+    switch (activeTab) {
+      case 'users':
+        return <UsersTab users={users} onEdit={handleOpenModal} />;
+      case 'products':
+        return <ProductsTab products={products} onEdit={handleOpenModal} />;
+      case 'customers':
+        return <CustomersTab customers={customers} onEdit={handleOpenModal} />;
+      default:
+        return null;
+    }
+  };
+  
+  const getModalTitle = () => {
+      switch (activeTab) {
+          case 'users':
+              return editingItem ? 'تعديل مستخدم' : 'إضافة مستخدم';
+          case 'products':
+              return editingItem ? 'تعديل منتج' : 'إضافة منتج';
+          case 'customers':
+              return editingItem ? 'تعديل عميل' : 'إضافة عميل';
+      }
+  }
+
   return (
-    <form onSubmit={handleSubmit} className="space-y-4" dir="rtl">
-      <Input label="اسم المستخدم" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} required />
-      <Input label="كلمة المرور" type="password" value={formData.password} onChange={e => setFormData({ ...formData, password: e.target.value })} required />
-      <Select 
-        label="الدور"
-        options={Object.values(ROLES).map(r => ({ value: r, label: r }))}
-        value={formData.role}
-        onChange={e => setFormData({ ...formData, role: e.target.value as UserRole })}
-      />
-      <div className="flex justify-end space-x-2 space-x-reverse pt-4">
-        <Button type="button" variant="secondary" onClick={onCancel}>إلغاء</Button>
-        <Button type="submit">حفظ</Button>
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8" dir="rtl">
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-2xl font-bold text-gray-800">لوحة تحكم الأدمن</h2>
+        <Button onClick={() => handleOpenModal()}>إضافة {activeTab === 'users' ? 'مستخدم' : activeTab === 'products' ? 'منتج' : 'عميل'}</Button>
       </div>
-    </form>
+
+      <div className="border-b border-gray-200">
+        <nav className="-mb-px flex space-x-8 space-x-reverse" aria-label="Tabs">
+          <button
+            onClick={() => setActiveTab('users')}
+            className={`${activeTab === 'users' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
+          >
+            المستخدمون
+          </button>
+          <button
+            onClick={() => setActiveTab('products')}
+            className={`${activeTab === 'products' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
+          >
+            المنتجات
+          </button>
+           <button
+            onClick={() => setActiveTab('customers')}
+            className={`${activeTab === 'customers' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
+          >
+            العملاء
+          </button>
+        </nav>
+      </div>
+      
+      <div className="mt-6">
+        {renderContent()}
+      </div>
+
+      <Modal isOpen={isModalOpen} onClose={handleCloseModal} title={getModalTitle()}>
+        {activeTab === 'users' && <UserForm userToEdit={editingItem} onClose={handleCloseModal} />}
+        {activeTab === 'products' && <ProductForm productToEdit={editingItem} onClose={handleCloseModal} />}
+        {activeTab === 'customers' && <CustomerForm customerToEdit={editingItem} onClose={handleCloseModal} />}
+      </Modal>
+    </div>
   );
 };
 
-const ProductForm: React.FC<{ product: Product | null; onSave: (product: Product) => void; onCancel: () => void; isEditing: boolean }> = ({ product, onSave, onCancel, isEditing }) => {
-    const [formData, setFormData] = useState({
-        sku: product?.sku || '',
-        name: product?.name || '',
-    });
-
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        if(!formData.sku || !formData.name) {
-            alert("كود المنتج والاسم مطلوبان.");
-            return;
+// --- User Management ---
+const UsersTab: React.FC<{ users: User[], onEdit: (user: User) => void }> = ({ users, onEdit }) => {
+    const handleDelete = async (id: string) => {
+        if (window.confirm('هل أنت متأكد من حذف هذا المستخدم؟')) {
+            await deleteDocument('users', id);
         }
-        onSave(formData);
     }
-
     return (
-         <form onSubmit={handleSubmit} className="space-y-4" dir="rtl">
-            <Input label="كود المنتج (SKU)" value={formData.sku} onChange={e => setFormData({...formData, sku: e.target.value})} required disabled={isEditing} />
-            <Input label="اسم المنتج" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} required />
-            <div className="flex justify-end space-x-2 space-x-reverse pt-4">
-                <Button type="button" variant="secondary" onClick={onCancel}>إلغاء</Button>
-                <Button type="submit">حفظ</Button>
-            </div>
-        </form>
-    );
+      <div className="bg-white shadow-sm rounded-lg overflow-x-auto">
+        <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+                <tr>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">الاسم</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">الدور</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">إجراءات</th>
+                </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+                {users.map(user => (
+                    <tr key={user.id}>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{user.name}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{user.role === 'Admin' ? 'مدير' : 'مندوب'}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2 space-x-reverse">
+                            <Button variant="secondary" onClick={() => onEdit(user)}>تعديل</Button>
+                            <Button variant="danger" onClick={() => handleDelete(user.id)}>حذف</Button>
+                        </td>
+                    </tr>
+                ))}
+            </tbody>
+        </table>
+      </div>
+    )
 }
 
-const CustomerForm: React.FC<{ customer: Customer | null; onSave: (customer: Customer) => void; onCancel: () => void; isEditing: boolean }> = ({ customer, onSave, onCancel, isEditing }) => {
-    const [formData, setFormData] = useState({
-        phone: customer?.phone || '',
-        name: customer?.name || '',
-        address: customer?.address || '',
-    });
+const UserForm: React.FC<{ userToEdit?: User | null, onClose: () => void }> = ({ userToEdit, onClose }) => {
+    const [name, setName] = useState(userToEdit?.name || '');
+    const [password, setPassword] = useState('');
+    const [role, setRole] = useState<UserRole>(userToEdit?.role || 'Representative');
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if(!formData.phone || !formData.name || !formData.address) {
-            alert("جميع الحقول مطلوبة.");
-            return;
+        const userData: Partial<User> = { name, role };
+        if (password) {
+            userData.password = password;
         }
-        onSave(formData);
+        if (userToEdit) {
+            await updateDocument('users', userToEdit.id, userData);
+        } else {
+            if (!password) {
+                alert('كلمة المرور مطلوبة للمستخدم الجديد.');
+                return;
+            }
+            await addDocument('users', userData);
+        }
+        onClose();
     }
-    
+
     return (
         <form onSubmit={handleSubmit} className="space-y-4" dir="rtl">
-            <Input label="هاتف العميل" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} required disabled={isEditing} />
-            <Input label="اسم العميل" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} required />
-            <Input label="عنوان العميل" value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} required />
-             <div className="flex justify-end space-x-2 space-x-reverse pt-4">
-                <Button type="button" variant="secondary" onClick={onCancel}>إلغاء</Button>
+            <Input label="الاسم" value={name} onChange={e => setName(e.target.value)} required />
+            <Input label={`كلمة المرور ${userToEdit ? '(اتركها فارغة لعدم التغيير)' : ''}`} type="password" value={password} onChange={e => setPassword(e.target.value)} required={!userToEdit}/>
+            <Select label="الدور" value={role} onChange={e => setRole(e.target.value as UserRole)} options={[{value: 'Admin', label: 'مدير'}, {value: 'Representative', label: 'مندوب'}]} />
+            <div className="flex justify-end space-x-2 space-x-reverse">
+                <Button type="button" variant="secondary" onClick={onClose}>إلغاء</Button>
                 <Button type="submit">حفظ</Button>
             </div>
         </form>
     )
 }
 
-
-// --- Main Admin Panel Component ---
-
-interface AdminPanelProps {
-  users: User[];
-  onAddUser: (user: User) => void;
-  onUpdateUser: (user: User) => void;
-  onDeleteUser: (userId: string) => void;
-
-  products: Product[];
-  onAddProduct: (product: Product) => boolean;
-  onUpdateProduct: (product: Product) => void;
-  onDeleteProduct: (sku: string) => void;
-
-  customers: Customer[];
-  onAddCustomer: (customer: Customer) => boolean;
-  onUpdateCustomer: (customer: Customer) => void;
-  onDeleteCustomer: (phone: string) => void;
+// --- Product Management ---
+const ProductsTab: React.FC<{ products: Product[], onEdit: (p: Product) => void }> = ({ products, onEdit }) => {
+     const handleDelete = async (id: string) => {
+        if (window.confirm('هل أنت متأكد من حذف هذا المنتج؟')) {
+            await deleteDocument('products', id);
+        }
+    }
+    return (
+      <div className="bg-white shadow-sm rounded-lg overflow-x-auto">
+        <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+                <tr>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">كود المنتج</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">اسم المنتج</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">سعر التكلفة</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">سعر البيع</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">إجراءات</th>
+                </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+                {products.map(product => (
+                    <tr key={product.id}>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{product.id}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{product.name}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{product.costPrice.toFixed(2)}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{product.sellingPrice.toFixed(2)}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2 space-x-reverse">
+                            <Button variant="secondary" onClick={() => onEdit(product)}>تعديل</Button>
+                            <Button variant="danger" onClick={() => handleDelete(product.id)}>حذف</Button>
+                        </td>
+                    </tr>
+                ))}
+            </tbody>
+        </table>
+      </div>
+    )
 }
 
-const AdminPanel: React.FC<AdminPanelProps> = ({ 
-    users, onAddUser, onUpdateUser, onDeleteUser,
-    products, onAddProduct, onUpdateProduct, onDeleteProduct,
-    customers, onAddCustomer, onUpdateCustomer, onDeleteCustomer
- }) => {
-  const [activeTab, setActiveTab] = useState<'users' | 'products' | 'customers'>('users');
-  
-  // Modal States
-  const [userModal, setUserModal] = useState<{ isOpen: boolean; user: User | null }>({ isOpen: false, user: null });
-  const [productModal, setProductModal] = useState<{ isOpen: boolean; product: Product | null }>({ isOpen: false, product: null });
-  const [customerModal, setCustomerModal] = useState<{ isOpen: boolean; customer: Customer | null }>({ isOpen: false, customer: null });
+const ProductForm: React.FC<{ productToEdit?: Product | null, onClose: () => void }> = ({ productToEdit, onClose }) => {
+    const [name, setName] = useState(productToEdit?.name || '');
+    const [costPrice, setCostPrice] = useState(productToEdit?.costPrice || 0);
+    const [sellingPrice, setSellingPrice] = useState(productToEdit?.sellingPrice || 0);
 
-  const handleSaveUser = useCallback((user: User) => {
-    if (userModal.user) {
-        onUpdateUser(user);
-    } else {
-        onAddUser(user);
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        const productData = { name, costPrice: Number(costPrice), sellingPrice: Number(sellingPrice) };
+        if (productToEdit) {
+            await updateDocument('products', productToEdit.id, productData);
+        } else {
+            await addDocument('products', productData);
+        }
+        onClose();
     }
-    setUserModal({ isOpen: false, user: null });
-  }, [userModal.user, onAddUser, onUpdateUser]);
 
-  const handleSaveProduct = useCallback((product: Product) => {
-    if (productModal.product) {
-        onUpdateProduct(product);
-    } else {
-        if (!onAddProduct(product)) {
-            alert("منتج بنفس الكود موجود بالفعل.");
-            return;
+    return (
+        <form onSubmit={handleSubmit} className="space-y-4" dir="rtl">
+            <Input label="اسم المنتج" value={name} onChange={e => setName(e.target.value)} required />
+            <Input label="سعر التكلفة" type="number" step="0.01" value={costPrice} onChange={e => setCostPrice(Number(e.target.value))} required />
+            <Input label="سعر البيع" type="number" step="0.01" value={sellingPrice} onChange={e => setSellingPrice(Number(e.target.value))} required />
+            <div className="flex justify-end space-x-2 space-x-reverse">
+                <Button type="button" variant="secondary" onClick={onClose}>إلغاء</Button>
+                <Button type="submit">حفظ</Button>
+            </div>
+        </form>
+    )
+}
+
+// --- Customer Management ---
+const CustomersTab: React.FC<{ customers: Customer[], onEdit: (c: Customer) => void }> = ({ customers, onEdit }) => {
+    const handleDelete = async (id: string) => {
+        if (window.confirm('هل أنت متأكد من حذف هذا العميل؟')) {
+            await deleteDocument('customers', id);
         }
     }
-    setProductModal({ isOpen: false, product: null });
-  }, [productModal.product, onAddProduct, onUpdateProduct]);
-
-  const handleSaveCustomer = useCallback((customer: Customer) => {
-    if (customerModal.customer) {
-        onUpdateCustomer(customer);
-    } else {
-        if (!onAddCustomer(customer)) {
-            alert("عميل بنفس رقم الهاتف موجود بالفعل.");
-            return;
-        }
-    }
-    setCustomerModal({ isOpen: false, customer: null });
-  }, [customerModal.customer, onAddCustomer, onUpdateCustomer]);
-
-  const handleDelete = (type: 'user' | 'product' | 'customer', id: string) => {
-      if(window.confirm(`هل أنت متأكد من حذف هذا العنصر؟ لا يمكن التراجع عن هذا الإجراء.`)) {
-          switch(type) {
-              case 'user': onDeleteUser(id); break;
-              case 'product': onDeleteProduct(id); break;
-              case 'customer': onDeleteCustomer(id); break;
-          }
-      }
-  }
-
-  const renderContent = () => {
-    switch (activeTab) {
-      case 'users':
-        return (
-          <div>
-            <div className="flex justify-between items-center">
-              <h3 className="text-lg font-medium text-gray-900">المستخدمون</h3>
-              <Button onClick={() => setUserModal({ isOpen: true, user: null })}>إضافة مستخدم جديد</Button>
-            </div>
-            <div className="overflow-x-auto mt-4">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+    return (
+      <div className="bg-white shadow-sm rounded-lg overflow-x-auto">
+        <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">الاسم</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">الدور</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">إجراءات</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">اسم العميل</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">الهاتف</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">العنوان</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">إجراءات</th>
                 </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {users.map(user => (
-                  <tr key={user.id}>
-                    <td className="px-6 py-4 whitespace-nowrap">{user.name}</td>
-                    <td className="px-6 py-4 whitespace-nowrap">{user.role}</td>
-                    <td className="px-6 py-4 whitespace-nowrap space-x-2 space-x-reverse">
-                      <Button variant="secondary" onClick={() => setUserModal({ isOpen: true, user })}>تعديل</Button>
-                      <Button variant="danger" onClick={() => handleDelete('user', user.id)}>حذف</Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            </div>
-          </div>
-        );
-      case 'products':
-        return (
-          <div>
-             <div className="flex justify-between items-center">
-                <h3 className="text-lg font-medium text-gray-900">المنتجات</h3>
-                <Button onClick={() => setProductModal({ isOpen: true, product: null })}>إضافة منتج جديد</Button>
-            </div>
-            <div className="overflow-x-auto mt-4">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">SKU</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">اسم المنتج</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">إجراءات</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {products.map(product => (
-                  <tr key={product.sku}>
-                    <td className="px-6 py-4 whitespace-nowrap">{product.sku}</td>
-                    <td className="px-6 py-4 whitespace-nowrap">{product.name}</td>
-                     <td className="px-6 py-4 whitespace-nowrap space-x-2 space-x-reverse">
-                      <Button variant="secondary" onClick={() => setProductModal({ isOpen: true, product })}>تعديل</Button>
-                      <Button variant="danger" onClick={() => handleDelete('product', product.sku)}>حذف</Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            </div>
-          </div>
-        );
-      case 'customers':
-         return (
-          <div>
-            <div className="flex justify-between items-center">
-                <h3 className="text-lg font-medium text-gray-900">العملاء</h3>
-                <Button onClick={() => setCustomerModal({ isOpen: true, customer: null })}>إضافة عميل جديد</Button>
-            </div>
-            <div className="overflow-x-auto mt-4">
-             <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">الهاتف</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">الاسم</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">العنوان</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">إجراءات</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
                 {customers.map(customer => (
-                  <tr key={customer.phone}>
-                    <td className="px-6 py-4 whitespace-nowrap">{customer.phone}</td>
-                    <td className="px-6 py-4 whitespace-nowrap">{customer.name}</td>
-                    <td className="px-6 py-4 whitespace-nowrap">{customer.address}</td>
-                     <td className="px-6 py-4 whitespace-nowrap space-x-2 space-x-reverse">
-                      <Button variant="secondary" onClick={() => setCustomerModal({ isOpen: true, customer })}>تعديل</Button>
-                      <Button variant="danger" onClick={() => handleDelete('customer', customer.phone)}>حذف</Button>
-                    </td>
-                  </tr>
+                    <tr key={customer.id}>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{customer.name}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{customer.phone}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 max-w-xs truncate">{customer.address}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2 space-x-reverse">
+                            <Button variant="secondary" onClick={() => onEdit(customer)}>تعديل</Button>
+                            <Button variant="danger" onClick={() => handleDelete(customer.id)}>حذف</Button>
+                        </td>
+                    </tr>
                 ))}
-              </tbody>
-            </table>
-            </div>
-          </div>
-        );
-      default:
-        return null;
+            </tbody>
+        </table>
+      </div>
+    )
+}
+
+const CustomerForm: React.FC<{ customerToEdit?: Customer | null, onClose: () => void }> = ({ customerToEdit, onClose }) => {
+    const [name, setName] = useState(customerToEdit?.name || '');
+    const [phone, setPhone] = useState(customerToEdit?.phone || '');
+    const [address, setAddress] = useState(customerToEdit?.address || '');
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        const customerData = { name, phone, address };
+        if (customerToEdit) {
+            await updateDocument('customers', customerToEdit.id, customerData);
+        } else {
+            await addDocument('customers', customerData);
+        }
+        onClose();
     }
-  };
 
-  return (
-    <div className="p-4 sm:p-6 lg:p-8" dir="rtl">
-        <div className="sm:flex sm:items-center sm:justify-between mb-6">
-            <div>
-                <h2 className="text-2xl font-bold text-gray-900">لوحة الإدارة</h2>
-                <p className="mt-1 text-sm text-gray-500">إدارة بيانات النظام الأساسية.</p>
+    return (
+        <form onSubmit={handleSubmit} className="space-y-4" dir="rtl">
+            <Input label="اسم العميل" value={name} onChange={e => setName(e.target.value)} required />
+            <Input label="الهاتف" value={phone} onChange={e => setPhone(e.target.value)} required />
+            <Input label="العنوان" value={address} onChange={e => setAddress(e.target.value)} required />
+            <div className="flex justify-end space-x-2 space-x-reverse">
+                <Button type="button" variant="secondary" onClick={onClose}>إلغاء</Button>
+                <Button type="submit">حفظ</Button>
             </div>
-        </div>
+        </form>
+    )
+}
 
-        <div className="bg-white p-4 rounded-lg shadow-sm">
-            <div className="border-b border-gray-200">
-                <nav className="-mb-px flex space-x-4 space-x-reverse" aria-label="Tabs">
-                    <button
-                        onClick={() => setActiveTab('users')}
-                        className={`${activeTab === 'users' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
-                    >
-                        المستخدمون
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('products')}
-                        className={`${activeTab === 'products' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
-                    >
-                        المنتجات
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('customers')}
-                        className={`${activeTab === 'customers' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
-                    >
-                        العملاء
-                    </button>
-                </nav>
-            </div>
-            <div className="mt-6">
-              {renderContent()}
-            </div>
-        </div>
-
-        {/* --- Modals for CRUD --- */}
-        <Modal isOpen={userModal.isOpen} onClose={() => setUserModal({ isOpen: false, user: null })} title={userModal.user ? "تعديل مستخدم" : "إضافة مستخدم جديد"}>
-            <UserForm user={userModal.user} onSave={handleSaveUser} onCancel={() => setUserModal({ isOpen: false, user: null })} />
-        </Modal>
-
-        <Modal isOpen={productModal.isOpen} onClose={() => setProductModal({ isOpen: false, product: null })} title={productModal.product ? "تعديل منتج" : "إضافة منتج جديد"}>
-            <ProductForm product={productModal.product} onSave={handleSaveProduct} onCancel={() => setProductModal({ isOpen: false, product: null })} isEditing={!!productModal.product} />
-        </Modal>
-
-        <Modal isOpen={customerModal.isOpen} onClose={() => setCustomerModal({ isOpen: false, customer: null })} title={customerModal.customer ? "تعديل عميل" : "إضافة عميل جديد"}>
-            <CustomerForm customer={customerModal.customer} onSave={handleSaveCustomer} onCancel={() => setCustomerModal({ isOpen: false, customer: null })} isEditing={!!customerModal.customer} />
-        </Modal>
-    </div>
-  );
-};
 
 export default AdminPanel;

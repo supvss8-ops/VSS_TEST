@@ -1,39 +1,47 @@
 export type UserRole = 'Admin' | 'Representative';
 
+export type OrderStatus = 'قيد الاستلام' | 'تم الاستلام';
+
 export interface User {
-  id: string;
+  id: string; // Document ID from Firestore
   name: string;
+  password?: string;
   role: UserRole;
-  password?: string; // Optional for initial setup, but required for login logic
 }
 
 export interface Product {
-  sku: string;
+  id: string;
   name: string;
+  costPrice: number;
+  sellingPrice: number;
 }
 
 export interface Customer {
-  phone: string;
+  id: string;
   name: string;
+  phone: string;
   address: string;
 }
 
 export interface OrderItem {
-  sku: string;
+  productId: string;
+  productName: string;
   quantity: number;
-  purchasePrice: number;
+  costPrice: number;
   sellingPrice: number;
 }
 
-export type OrderStatus = 'قيد الاستلام' | 'تم الاستلام';
-
 export interface Order {
-  invoiceNumber: string;
-  invoiceDate: string; // YYYY-MM-DD format for easier sorting/filtering
-  customerPhone: string;
+  id: string; // The unique ID for the order
+  invoiceNumber: string; 
+  invoiceDate: string; // ISO string format
+  customerId: string;
   customerName: string;
+  customerPhone: string;
   customerAddress: string;
   items: OrderItem[];
+  totalAmount: number;
   status: OrderStatus;
-  createdBy: string; // userId of the representative
+  createdBy: string; // User ID
+  createdByName: string;
 }
